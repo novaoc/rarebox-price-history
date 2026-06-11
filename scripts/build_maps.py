@@ -30,6 +30,7 @@ from common import (  # noqa: E402
 )
 
 NEW_ONLY = "--new-only" in sys.argv
+RETRY_UNMATCHED = "--retry-unmatched" in sys.argv
 
 # Hand-checked exceptions where name joining fails (extend as logged)
 POKEMON_NAME_FIXES = {
@@ -38,7 +39,17 @@ POKEMON_NAME_FIXES = {
     "sun and moon base set": "sun and moon",
     "xy base set": "xy",
     "black and white base set": "black and white",
+    "scarlet and violet 151": "151",
+    "scarlet and violet promo cards": "scarlet and violet black star promos",
+    "sword and shield promo cards": "swsh black star promos",
+    "sun and moon promo cards": "sm black star promos",
+    "xy promo cards": "xy black star promos",
+    "black and white promo cards": "bw black star promos",
+    "trading card game classic": "trading card game classic",
 }
+
+# TCGplayer prefixes era tags the API names don't carry ("SM - Team Up")
+POKEMON_STRIP_PREFIX = re.compile(r"^(sm|swsh|sv|xy|bw|me|hgss|dp|pl|ex|col)\s+")
 
 
 def pokemon_set_index():
@@ -49,7 +60,7 @@ def pokemon_set_index():
 def lorcana_set_index():
     d = fetch_json("https://api.lorcast.com/v0/sets")
     arr = d.get("results", d) or []
-    return {norm_name(s["name"]): s["code"] for s in arr}
+    return {norm_name(s["name"]): s["code"] for s in arr}, {s["code"] for s in arr}
 
 
 def onepiece_set_index():
@@ -81,9 +92,19 @@ def map_group(game, g, ctx):
         return slug(g.get("name") or "")
     if game == "pokemon":
         name = POKEMON_NAME_FIXES.get(name, name)
-        return ctx["pokemon"].get(name)
+        hit = ctx["pokemon"].get(name)
+        if not hit:
+            hit = ctx["pokemon"].get(POKEMON_STRIP_PREFIX.sub("", name))
+        if not hit and "promos" in name:
+            hit = ctx["pokemon"].get(name.replace("promos", "collection"))
+        return hit
     if game == "lorcana":
-        return ctx["lorcana"].get(name)
+        hit = ctx["lorcana"].get(name)
+        if not hit and abbr and abbr.upper() in ctx["lor_codes"]:
+            hit = abbr.upper() if abbr.upper() in ctx["lor_codes"] else None
+        if not hit and abbr and abbr in ctx["lor_codes"]:
+            hit = abbr
+        return hit
     if game == "one-piece":
         m = re.match(r"^(OP|EB|PRB)-?(\d+)$", abbr, re.I)
         if m:
@@ -121,7 +142,7 @@ def main() -> int:
     ctx = {}
     log("loading set indexes…")
     ctx["pokemon"] = pokemon_set_index()
-    ctx["lorcana"] = lorcana_set_index()
+    ctx["lorcana"], ctx["lor_codes"] = lorcana_set_index()
     ctx["one-piece"], ctx["op_ids"] = onepiece_set_index()
     ctx["riftbound"], ctx["rift_ids"] = riftbound_set_index()
     ctx["scry"] = scryfall_codes()
@@ -130,7 +151,10 @@ def main() -> int:
     for cat, game in CATEGORIES.items():
         cat_map = groups_map.setdefault(str(cat), {})
         groups = fetch_json(f"{TCGCSV}/{cat}/groups")["results"]
-        todo = [g for g in groups if not (NEW_ONLY and str(g["groupId"]) in cat_map)]
+        if RETRY_UNMATCHED:
+            todo = [g for g in groups if cat_map.get(str(g["groupId"])) is None]
+        else:
+            todo = [g for g in groups if not (NEW_ONLY and str(g["groupId"]) in cat_map)]
         log(f"[{game}] {len(groups)} groups, mapping {len(todo)}")
         for g in todo:
             gid = str(g["groupId"])
