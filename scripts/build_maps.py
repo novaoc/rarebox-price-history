@@ -40,6 +40,7 @@ POKEMON_NAME_FIXES = {
     "xy base set": "xy",
     "black and white base set": "black and white",
     "scarlet and violet 151": "151",
+    "base set": "base",
     "scarlet and violet promo cards": "scarlet and violet black star promos",
     "sword and shield promo cards": "swsh black star promos",
     "sun and moon promo cards": "sm black star promos",

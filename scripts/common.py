@@ -109,8 +109,12 @@ def product_number(p: dict) -> str:
 
 
 def is_variant_name(name: str) -> bool:
-    """'Budew (Mirror Foil)' — variant printings share the base Number."""
-    return bool(re.search(r"\((?!.*/)[^)]+\)\s*$", name or ""))
+    """'Budew (Mirror Foil)' — variant printings share the base Number.
+    Purely numeric parens are NOT variants: One Piece base prints are
+    named like 'Roronoa Zoro (001)' and skipping them dropped every
+    leader card from the history."""
+    m = re.search(r"\(((?!.*/)[^)]+)\)\s*$", name or "")
+    return bool(m and re.search(r"[a-zA-Z]", m.group(1)))
 
 
 def load_json(path: Path, default):
