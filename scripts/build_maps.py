@@ -120,6 +120,17 @@ def map_group(game, g, ctx):
     return None
 
 
+OP_VARIANT_ALIASES = {"spr": "sp"}
+
+
+def op_variant_slug(name: str) -> str:
+    m = re.search(r"\(((?!.*/)[^)]+)\)\s*$", name or "")
+    if not m or not re.search(r"[a-zA-Z]", m.group(1)):
+        return ""
+    slug = re.sub(r"\s+", "-", m.group(1).strip().lower())
+    return OP_VARIANT_ALIASES.get(slug, slug)
+
+
 def card_key(game, p):
     """Per-game card key from a tcgplayer product. None = not a single card."""
     num = product_number(p)
@@ -129,7 +140,11 @@ def card_key(game, p):
     if not num:
         return None
     if game == "one-piece":
-        return num.split("/")[0].strip().upper()
+        # variant printings (SP/Manga/Alt Art) get suffixed keys matching the
+        # app's card ids — they're the cards whose history people actually want
+        base = num.split("/")[0].strip().upper()
+        v = op_variant_slug(p.get("name", ""))
+        return f"{base}#{v}" if v else base
     if game == "yugioh":
         return num.split("/")[0].strip().upper()
     if game == "mtg":
@@ -177,7 +192,7 @@ def main() -> int:
                 key = card_key(game, p)
                 if not key:
                     continue
-                variant = 1 if (game != "riftbound" and is_variant_name(p.get("name", ""))) else 0
+                variant = 1 if (game not in ("riftbound", "one-piece") and is_variant_name(p.get("name", ""))) else 0
                 pmap[str(p["productId"])] = [key, variant]
             if pmap:
                 save_json(MAPS / "products" / game / f"{set_key}.json", pmap)
