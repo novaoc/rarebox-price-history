@@ -187,13 +187,26 @@ def main() -> int:
                 err(f"  {game}/{set_key}: products fetch failed ({e})")
                 cat_map[gid] = None
                 continue
-            pmap = {}
+            # A printing is only a "variant" to skip when it COLLIDES with another
+            # product on the same collector number (e.g. a Mirror Foil sharing the
+            # base #). A unique number — secret rares, alt arts, full arts — is its
+            # own card people want charted, even if its name has a "(...)" suffix,
+            # so keep it. (Riftbound/One Piece key by productId/suffixed id, so
+            # every printing is already its own card.)
+            by_key = {}
             for p in prods:
                 key = card_key(game, p)
-                if not key:
+                if key:
+                    by_key.setdefault(key, []).append(p)
+            pmap = {}
+            for key, grp in by_key.items():
+                if game in ("riftbound", "one-piece") or len(grp) == 1:
+                    for p in grp:
+                        pmap[str(p["productId"])] = [key, 0]
                     continue
-                variant = 1 if (game not in ("riftbound", "one-piece") and is_variant_name(p.get("name", ""))) else 0
-                pmap[str(p["productId"])] = [key, variant]
+                base = next((p for p in grp if not is_variant_name(p.get("name", ""))), grp[0])
+                for p in grp:
+                    pmap[str(p["productId"])] = [key, 0 if p is base else 1]
             if pmap:
                 save_json(MAPS / "products" / game / f"{set_key}.json", pmap)
             time.sleep(0.11)
